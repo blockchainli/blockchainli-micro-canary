@@ -121,11 +121,11 @@ To use it from your own code, import `execute_canary_order` directly. This is wh
 ```python
 from canary_trader import execute_canary_order
 
-# Submit a $10 USDT BUY order on BTCUSDT within safety bounds
+# Submit a $25 USDT BUY order on BTCUSDT within safety bounds
 response = execute_canary_order(
-    symbol="BTCUSDT",
+    symbol="ETHUSDT",
     action="BUY",
-    target_usdt=10.0,
+    target_usdt=25.0,
 )
 print(response)
 ```
