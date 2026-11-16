@@ -58,30 +58,65 @@ By design, this open-source micro-canary enforces strict guardrails to protect a
 - **Marketable Limit Collar (No Raw Market Orders)**
   Never submits naked `MARKET` orders. Forces the script to fetch the best ask/bid, calculate an Immediate-or-Cancel (`IOC`) limit price bounded by a maximum slippage cap (e.g., `0.05%`–`0.10%`), and reject if prices drift.
 - **Local-Only Credentials**
-  Requires users to supply their own local environment variables (`BINANCE_API_KEY`, `BINANCE_API_SECRET`). The script does not touch external third-party servers, has no phone-home telemetry, and handles credentials entirely in local system memory.
+  Requires users to supply their own local environment variables (`BINANCE_API_KEY`, `BINANCE_API_SECRET`, or `BINANCE_DEMO_API_KEY`, `BINANCE_DEMO_API_SECRET` for demo). The script does not touch external third-party servers, has no phone-home telemetry, and handles credentials entirely in local system memory.
 
 ---
 
 ## Quick Start
 
-### 1. Prerequisites
+### 1. Create a Virtual Environment & Install Dependencies
 
-Install the `requests` library in your Python environment:
+Requires Python 3.9+.
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install requests
 ```
 
 ### 2. Set Local Credentials
 
-Export your Binance API credentials in your local shell session:
+Copy the template to `.env` and fill in your keys. The file is loaded automatically on import and is git-ignored:
 
 ```bash
-export BINANCE_API_KEY="your_api_key_here"
-export BINANCE_API_SECRET="your_api_secret_here"
+cp .env.copy .env
 ```
 
+```bash
+# "demo" for Binance Demo Trading, "live" (default) for the real account.
+BINANCE_ENV="demo"
+
+# Live account keys (used when BINANCE_ENV="live")
+BINANCE_API_KEY="your_api_key_here"
+BINANCE_API_SECRET="your_api_secret_here"
+
+# Demo Trading keys (used when BINANCE_ENV="demo")
+BINANCE_DEMO_API_KEY="your_demo_api_key_here"
+BINANCE_DEMO_API_SECRET="your_demo_api_secret_here"
+```
+
+Alternatively, `export` the same variables in your shell. Exported variables take precedence over `.env`.
+
+#### Demo vs. Live
+
+| `BINANCE_ENV`      | Endpoint                         | Keys used                                           |
+| ------------------ | -------------------------------- | --------------------------------------------------- |
+| `demo`             | `https://demo-fapi.binance.com`  | `BINANCE_DEMO_API_KEY` / `BINANCE_DEMO_API_SECRET`  |
+| `live` (or unset)  | `https://fapi.binance.com`       | `BINANCE_API_KEY` / `BINANCE_API_SECRET`            |
+
+Any other value raises an error, so a typo never silently falls through to the live account. Demo keys must be created separately inside Binance Demo Trading; live keys are not accepted on the demo endpoint and vice versa.
+
 ### 3. Execute a Canary Order
+
+The repo ships with a ready-to-run example, [`main.py`](main.py), which submits a $10 USDT BUY order on `BTCUSDT`. With the virtual environment active and `.env` configured, run:
+
+```bash
+python main.py
+```
+
+The order goes to whichever account `BINANCE_ENV` points at, so set it to `demo` first to try things safely. The script prints the raw Binance API response (order details on success, or an error payload such as `{"code": ..., "msg": ...}`). Guardrail violations, like an oversized notional, a non-whitelisted symbol, missing keys or a cooldown still active, raise an exception before anything is sent to the exchange.
+
+To use it from your own code, import `execute_canary_order` directly. This is what `main.py` contains:
 
 ```python
 from canary_trader import execute_canary_order

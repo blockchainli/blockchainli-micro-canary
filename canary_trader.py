@@ -4,13 +4,63 @@ import os
 import time
 import requests
 
+
+def load_dotenv(path: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")) -> None:
+    """Load KEY=VALUE pairs from a local .env file. Existing env vars take precedence."""
+    if not os.path.isfile(path):
+        return
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip().removeprefix("export ").strip()
+            value = value.strip().strip('"').strip("'")
+            os.environ.setdefault(key, value)
+
+
+load_dotenv()
+
 # ----------------- HARD SAFETY BOUNDS (OPEN SOURCE GUARDRAILS) -----------------
-MAX_ALLOWED_NOTIONAL_USDT = 15.0  # Cannot execute orders exceeding $15
+MAX_ALLOWED_NOTIONAL_USDT = 100.0  # Cannot execute orders exceeding $15
 MAX_SLIPPAGE_PCT = 0.001          # 0.1% max price deviation collar
 COOLDOWN_SECONDS = 60             # Strict rate throttle
 ALLOWED_SYMBOLS = {"BTCUSDT", "ETHUSDT"}
 
 LAST_ORDER_TIMESTAMP = 0.0
+
+# USDⓈ-M Futures endpoints. Set BINANCE_ENV=demo to use Binance Demo Trading.
+BASE_URLS = {
+    "live": "https://fapi.binance.com",
+    "demo": "https://demo-fapi.binance.com",
+}
+
+
+# Credential env vars per environment (demo keys are created inside Binance Demo Trading).
+CREDENTIAL_VARS = {
+    "live": ("BINANCE_API_KEY", "BINANCE_API_SECRET"),
+    "demo": ("BINANCE_DEMO_API_KEY", "BINANCE_DEMO_API_SECRET"),
+}
+
+
+def get_env() -> str:
+    env = os.getenv("BINANCE_ENV", "live").strip().lower()
+    if env not in BASE_URLS:
+        raise ValueError(f"Invalid BINANCE_ENV '{env}'. Use one of: {', '.join(BASE_URLS)}.")
+    return env
+
+
+def get_base_url() -> str:
+    return BASE_URLS[get_env()]
+
+
+def get_credentials() -> tuple[str, str]:
+    key_var, secret_var = CREDENTIAL_VARS[get_env()]
+    api_key, api_secret = os.getenv(key_var), os.getenv(secret_var)
+    if not api_key or not api_secret:
+        raise EnvironmentError(f"Missing local exchange credentials: set {key_var} and {secret_var}.")
+    return api_key, api_secret
 
 def generate_client_order_id(symbol: str, action: str) -> str:
     """Deterministic hash preventing duplicate exchange-side executions."""
@@ -33,12 +83,9 @@ def execute_canary_order(symbol: str, action: str, target_usdt: float):
     if target_usdt > MAX_ALLOWED_NOTIONAL_USDT:
         raise ValueError(f"Requested ${target_usdt} exceeds maximum safety ceiling of ${MAX_ALLOWED_NOTIONAL_USDT}.")
 
-    api_key = os.getenv("BINANCE_API_KEY")
-    api_secret = os.getenv("BINANCE_API_SECRET")
-    if not api_key or not api_secret:
-        raise EnvironmentError("Missing local exchange credentials.")
+    api_key, api_secret = get_credentials()
 
-    base_url = "https://fapi.binance.com"  # USDⓈ-M Futures (or Testnet)
+    base_url = get_base_url()
 
     # 3. Read Order Book for Slippage Collar
     book = requests.get(f"{base_url}/fapi/v1/ticker/bookTicker?symbol={symbol}").json()
